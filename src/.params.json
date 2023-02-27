@@ -2,5 +2,7 @@
 	"locationId": "5020",
 	"_locationId_comments": "Blaine, WA",
 	"earlierByDate": "2023-06-21",
+	"datesToExclude": [
+	],
 	"numberOfAppts": 4
 }
