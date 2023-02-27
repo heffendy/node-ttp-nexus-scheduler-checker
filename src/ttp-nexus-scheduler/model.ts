@@ -1,60 +1,32 @@
 import dayjs, { Dayjs } from "dayjs";
+import { BookingCandidate, ITTPAppointmentDay, TTPAppointmentSlot } from "./interface";
 import * as tpprequests from "./requests"
 
-export interface TTPAppointmentSlot {
-	readonly start: Dayjs,
-	readonly end: Dayjs,
-	activeSpots: number,
-	totalSpots: number,
-}
-
-class TPPAppointmentSlotImpl implements TTPAppointmentSlot {
-	public readonly start: Dayjs;
-	public readonly end: Dayjs;
-
-	constructor(start: string, end: string) {
-		this.start = dayjs(start);
-		this.end = dayjs(end);
-	}
-
-	public activeSpots: number = 0;
-	public totalSpots: number = 0;
-}
-
-export interface TTPAppointmentDay {
-	readonly date: Dayjs,
-	readonly activeSlots: Map<string, TTPAppointmentSlot>,
-
-	readonly activeSlotCount: number;
-
-	getSlotsOptions(apptRequired: number): TTPAppointmentSlot[][];
-}
-
-class TTPAppointmentDayImpl implements TTPAppointmentDay {
+export class TTPAppointmentDay implements ITTPAppointmentDay{
 	public readonly date: Dayjs;
-	public readonly activeSlots = new Map<string, TTPAppointmentSlot>();
+	public readonly activeSlots: Set<TTPAppointmentSlot>;
+	public readonly activeApptCount: number;
 
-	constructor(date: Dayjs) {
+	constructor(date: Dayjs, activeSlots: Set<TTPAppointmentSlot>) {
 		this.date = date;
-	}
+		this.activeSlots = activeSlots;
 
-	public get activeSlotCount() {
-		let runningSlots: number = 0;
+		let runningApptCount = 0;
 		for (const slot of this.activeSlots.values()) {
-			runningSlots = runningSlots + slot.activeSpots;
+			runningApptCount = runningApptCount + slot.availableSpots;
 		}
-		return runningSlots;
+		this.activeApptCount = runningApptCount;
 	}
 
-	public getSlotsOptions(apptRequired: number): TTPAppointmentSlot[][] {
-		const results = new Array<TTPAppointmentSlot[]>();
+	public getBookingCandidates(apptRequired: number): BookingCandidate[] {
+		const results = new Array<BookingCandidate>();
 		const activeSlots = Array.from(this.activeSlots.values());
 		for (let start = 0; start < activeSlots.length; start++) {
 			const candidate = new Array<TTPAppointmentSlot>();
 			let runningApptCount = 0;
 			for (let end = start; end < activeSlots.length; end++) {
 				candidate.push(activeSlots[end]);
-				runningApptCount = runningApptCount + activeSlots[end].activeSpots;
+				runningApptCount = runningApptCount + activeSlots[end].availableSpots;
 				if (runningApptCount >= apptRequired) {
 					break;
 				}
@@ -69,59 +41,66 @@ class TTPAppointmentDayImpl implements TTPAppointmentDay {
 	}
 }
 
-const dumpAppointmentDays = (appointmentDays: Map<string, TTPAppointmentDay>) => {
-	for (const appointmentDay of appointmentDays.values()) {
-		dumpAppointmentDay(appointmentDay);
-	}
-}
 
-export const dumpAppointmentDay = (appointmentDay: TTPAppointmentDay) => {
-	console.log(`Appointment Date: ${appointmentDay.date.format('YYYY-MM-DD')}`);
-	for (const appointmentSlot of appointmentDay.activeSlots.values()) {
-		console.log(`  Slot: ${JSON.stringify({start: appointmentSlot.start.format('HH:mm'), active: appointmentSlot.activeSpots, total: appointmentSlot.totalSpots})}`);
-	}
-}
+/**
+ * Finds the soonest appointments available
+ * @param locationId The location Id to query appointment for
+ * @param beforeDate An optional date to find appointments earlier by
+ */
+export const findSoonestAppointments = async (locationId: string, beforeDate?: Dayjs): Promise<Set<TTPAppointmentDay>> => {
 
-export const findSoonestAppointments = async (locationId: string, beforeDate?: Dayjs): Promise<Map<string, TTPAppointmentDay>> => {
+	// Internal data structure
+	class TTPAppointmentDayIntermediate {
+		public readonly date: Dayjs;
+		public readonly activeSlotsMap = new Map<string, TTPAppointmentSlot>();
+
+		constructor(date: Dayjs) {
+			this.date = date;
+		}
+	}
+
 	const response = await tpprequests.fetchSlotsByLocationId(locationId);
 	// console.log(JSON.stringify(response, null, 2));
 
-	// Find the days
-	const appointmentDays = new Map<string, TTPAppointmentDay>();
+	// Determine the days from the slots returned
+	const apptDayIntsMap = new Map<string, TTPAppointmentDayIntermediate>();
 	response.forEach(slot => {
 		const dateString = dayjs(slot.startTimestamp).format("YYYY-MM-DD");
 		const date = dayjs(dateString);
 
 		// Ignore any that's later than beforeDate
 		if (!beforeDate || date.isBefore(beforeDate)) {
-			if (!appointmentDays.has(dateString)) {
+			if (!apptDayIntsMap.has(dateString)) {
 				// console.log(`TimeSlot: ${slot.startTimestamp} maps to date: ${dateString}`);
-				appointmentDays.set(dateString, new TTPAppointmentDayImpl(date));
+				apptDayIntsMap.set(dateString, new TTPAppointmentDayIntermediate(date));
 			}
 	
-			const appointmentDay = appointmentDays.get(dateString);
-			if (appointmentDay) {
+			const apptDayInt = apptDayIntsMap.get(dateString);
+			if (apptDayInt) {
 				// console.log(`Adding timeslot: ${slot.startTimestamp} to ${dateString}`);
-				appointmentDay.activeSlots.set(slot.startTimestamp, new TPPAppointmentSlotImpl(slot.startTimestamp, slot.endTimestamp))
+				apptDayInt.activeSlotsMap.set(slot.startTimestamp, new TTPAppointmentSlot(slot.startTimestamp, slot.endTimestamp))
 			}
 		}
 	});
 
-	// Find the active spots for each slot
-	for (const appointmentDay of appointmentDays.values()) {
+	// Populate the available spots for each slot
+	const apptDays = new Set<TTPAppointmentDay>();
+	for (const apptDayInt of apptDayIntsMap.values()) {
 		// console.log(`Fetching slots for ${appointmentDay.date}`);
-		const slotDetails = await tpprequests.fetchSlotsByDay(locationId, appointmentDay.date);
+		const slotDetails = await tpprequests.fetchSlotsByDay(locationId, apptDayInt.date);
 		slotDetails.forEach(slotDetails => {
 			if (slotDetails.active > 0) {
-				const slot = appointmentDay.activeSlots.get(slotDetails.timestamp);
+				const slot = apptDayInt.activeSlotsMap.get(slotDetails.timestamp);
 				if (slot) {
-					slot.activeSpots = slotDetails.active;
+					slot.availableSpots = slotDetails.active;
 					slot.totalSpots = slotDetails.total;
 				}
 			}
 		});
+
+		apptDays.add(new TTPAppointmentDay(apptDayInt.date, new Set(apptDayInt.activeSlotsMap.values())))
 	}
 
-	// dumpAppointmentDays(appointmentDays);
-	return appointmentDays;
+	// dumpAppointmentDays(apptDays);
+	return apptDays;
 }

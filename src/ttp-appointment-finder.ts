@@ -1,17 +1,17 @@
 import dayjs from "dayjs";
-import { dumpAppointmentDay, findSoonestAppointments } from "./ttp-nexus-scheduler/model";
+import { printBookingCandidates } from "./ttp-nexus-scheduler/display";
+import { findSoonestAppointments } from "./ttp-nexus-scheduler/model";
 import { delay } from "./utilities/delay";
 
-const iteration = async (locationId: string, earlierByDate: string, apptRequired: number, timeWindowInHours: number): Promise<boolean> => {
+const iteration = async (locationId: string, earlierByDate: string, apptRequired: number): Promise<boolean> => {
   // Step 1: Query for the available slots sorted by soonest
   const appointmentDays = await findSoonestAppointments(locationId, dayjs(earlierByDate));
 
-  // Step 2: Find the days with required slots
+  // Step 2: Find the days with booking candidates
   for (const appointmentDay of appointmentDays.values()) {
-    if (appointmentDay.activeSlotCount >= apptRequired) {
-      console.log(`Found Appointment Day with matching slots:`);
-      const slotCandidates = appointmentDay.getSlotsOptions(apptRequired);
-      console.log(JSON.stringify(slotCandidates, null, 2));
+    if (appointmentDay.activeApptCount >= apptRequired) {
+      const bookingCandidates = appointmentDay.getBookingCandidates(apptRequired);
+      printBookingCandidates(bookingCandidates);
       return true;
     }
   }
@@ -21,13 +21,13 @@ const iteration = async (locationId: string, earlierByDate: string, apptRequired
 
 const delayBetweenIteration = 300;
 
-export const pollForAppointmentSlots = async (locationId: string, earlierByDate: string, apptRequired: number, timeWindowInHours: number) => {
+export const pollForAppointmentSlots = async (locationId: string, earlierByDate: string, apptRequired: number) => {
   let found = false;
   while (!found) {
-    found = await iteration(locationId, earlierByDate, apptRequired, timeWindowInHours);
+    found = await iteration(locationId, earlierByDate, apptRequired);
 
     if (!found) {
-      console.log(`No appointment found; retrying in ${delayBetweenIteration} seconds`);
+      console.log(`No appointment matching criteria found; retrying in ${delayBetweenIteration} seconds`);
       await delay(delayBetweenIteration);
     }
   }
