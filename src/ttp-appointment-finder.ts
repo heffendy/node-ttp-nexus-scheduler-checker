@@ -1,7 +1,8 @@
 import dayjs from "dayjs";
 import { printBookingCandidates } from "./ttp-nexus-scheduler/display";
 import { findSoonestAppointments } from "./ttp-nexus-scheduler/model";
-import { delay } from "./utilities/delay";
+import { soundAlert } from "./utilities/alert";
+import { delaySeconds } from "./utilities/delay";
 
 const iteration = async (locationId: string, earlierByDate: string, apptRequired: number): Promise<boolean> => {
   // Step 1: Query for the available slots sorted by soonest
@@ -20,7 +21,6 @@ const iteration = async (locationId: string, earlierByDate: string, apptRequired
 }
 
 const delayBetweenIteration = 300;
-
 export const pollForAppointmentSlots = async (locationId: string, earlierByDate: string, apptRequired: number) => {
   let found = false;
   while (!found) {
@@ -28,7 +28,12 @@ export const pollForAppointmentSlots = async (locationId: string, earlierByDate:
 
     if (!found) {
       console.log(`No appointment matching criteria found; retrying in ${delayBetweenIteration} seconds`);
-      await delay(delayBetweenIteration);
+      await delaySeconds(delayBetweenIteration);
     }
+  }
+
+  while (true) {
+    soundAlert();
+    await delaySeconds(1);
   }
 }
