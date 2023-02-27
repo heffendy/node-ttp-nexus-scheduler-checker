@@ -19,7 +19,7 @@ const iteration = async (locationId: string, earlierByDate: string, apptRequired
   return false;
 }
 
-const delayBetweenIteration = 5;
+const delayBetweenIteration = 300;
 
 export const pollForAppointmentSlots = async (locationId: string, earlierByDate: string, apptRequired: number, timeWindowInHours: number) => {
   let found = false;
