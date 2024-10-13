@@ -6,8 +6,8 @@
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "clean": "rimraf dist",
-    "lint": "eslint '**/*.{js,ts}'",
-    "lint:fix": "eslint --fix '**/*.{js,ts}'",
+    "lint": "eslint src/**/*.ts",
+    "lint:fix": "eslint --fix **/*.ts",
     "prebuild": "npm run clean",
     "start": "ts-node src/main.ts",
     "test": "jest --passWithNoTests"

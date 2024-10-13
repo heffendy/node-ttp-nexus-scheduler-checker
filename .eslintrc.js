@@ -6,5 +6,8 @@ module.exports = {
   ],
   parserOptions: {
     project: './tsconfig.json'
+  },
+  rules: {
+    "sonarjs/cognitive-complexity": ["error", 20]
   }
 }
