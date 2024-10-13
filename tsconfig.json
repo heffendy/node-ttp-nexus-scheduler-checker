@@ -4,7 +4,6 @@
     "types": [
       "node"
     ],
-    "resolveJsonModule": true,
-    "esModuleInterop": true,
+    "target": "ES2015",
   }
 }

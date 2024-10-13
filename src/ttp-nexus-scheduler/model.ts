@@ -67,7 +67,7 @@ export const findSoonestAppointments = async (locationId: string, beforeDate?: D
     const date = dayjs(dateString)
 
     // Ignore any that's later than beforeDate
-    if ((beforeDate === undefined) || date.isBefore(beforeDate)) {
+    if ((beforeDate === undefined) || !beforeDate.isValid() || date.isBefore(beforeDate)) {
       if (!apptDayIntsMap.has(dateString)) {
         // console.log(`TimeSlot: ${slot.startTimestamp} maps to date: ${dateString}`);
         apptDayIntsMap.set(dateString, new TTPAppointmentDayIntermediate(date))
